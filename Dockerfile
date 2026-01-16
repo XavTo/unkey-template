@@ -1,5 +1,5 @@
-FROM alpine:3.20
-RUN apk add --no-cache ca-certificates curl mariadb-client
+FROM mysql:9.4
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY migrate.sh /migrate.sh
 RUN chmod +x /migrate.sh
 CMD ["/migrate.sh"]
