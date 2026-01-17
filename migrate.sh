@@ -39,26 +39,27 @@ fi
 # -----------------------------
 # Compute Unkey key components
 # -----------------------------
-# Unkey expects:
-# - start = short token
-# - hash  = sha256(long token)
-# See prefixedapikey ExtractShortToken / ExtractLongTokenHash :contentReference[oaicite:2]{index=2}
-
+# Unkey expects root keys in the form:
+#   unkey_<shortToken>_<longToken>
+# DB expects:
+#   start = <shortToken>
+#   hash  = sha256(<longToken>)
+#
+# Your UNKEY_ROOT_KEY MUST be a 3-part token. If it's not, fail fast to avoid
+# seeding an unusable key (which leads to key_not_found).
 KEY_PREFIX="$(printf '%s' "$UNKEY_ROOT_KEY" | cut -d'_' -f1)"
-PART2="$(printf '%s' "$UNKEY_ROOT_KEY" | cut -d'_' -f2)"
-PART3="$(printf '%s' "$UNKEY_ROOT_KEY" | cut -d'_' -f3)"
+SHORT_TOKEN="$(printf '%s' "$UNKEY_ROOT_KEY" | cut -d'_' -f2)"
+LONG_TOKEN="$(printf '%s' "$UNKEY_ROOT_KEY" | cut -d'_' -f3)"
+EXTRA_PART="$(printf '%s' "$UNKEY_ROOT_KEY" | cut -d'_' -f4)"
 
-if [ -n "$PART3" ] && [ "$PART3" != "$UNKEY_ROOT_KEY" ]; then
-  # Format: prefix_SHORT_LONG
-  ROOT_KEY_START="$PART2"
-  ROOT_KEY_LONG="$PART3"
-else
-  # Format: prefix_LONG
-  ROOT_KEY_START="$PART2"
-  ROOT_KEY_LONG="$PART2"
+if [ "$KEY_PREFIX" != "unkey" ] || [ -z "$SHORT_TOKEN" ] || [ -z "$LONG_TOKEN" ] || [ -n "$EXTRA_PART" ]; then
+  echo "ERROR: UNKEY_ROOT_KEY must be in the form: unkey_<shortToken>_<longToken>"
+  echo "Got: $UNKEY_ROOT_KEY"
+  exit 1
 fi
 
-ROOT_KEY_HASH="$(printf '%s' "$ROOT_KEY_LONG" | sha256sum | awk '{print $1}')"
+ROOT_KEY_START="$SHORT_TOKEN"
+ROOT_KEY_HASH="$(printf '%s' "$LONG_TOKEN" | sha256sum | awk '{print $1}')"
 
 echo "Root key prefix: $KEY_PREFIX"
 echo "Root key start : $ROOT_KEY_START"
