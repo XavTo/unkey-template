@@ -39,14 +39,6 @@ fi
 # -----------------------------
 # Compute Unkey key components
 # -----------------------------
-# Unkey expects root keys in the form:
-#   unkey_<shortToken>_<longToken>
-# DB expects:
-#   start = <shortToken>
-#   hash  = sha256(<longToken>)
-#
-# Your UNKEY_ROOT_KEY MUST be a 3-part token. If it's not, fail fast to avoid
-# seeding an unusable key (which leads to key_not_found).
 KEY_PREFIX="$(printf '%s' "$UNKEY_ROOT_KEY" | cut -d'_' -f1)"
 SHORT_TOKEN="$(printf '%s' "$UNKEY_ROOT_KEY" | cut -d'_' -f2)"
 LONG_TOKEN="$(printf '%s' "$UNKEY_ROOT_KEY" | cut -d'_' -f3)"
@@ -75,11 +67,12 @@ ROOT_KEY_ID="key_root"
 PERM_ID="perm_api_create_api"
 ROOT_KEY_NAME="root"
 
-echo "Seeding workspace/keyauth/root key..."
+echo "Seeding workspace/keyauth/root key and migrations..."
 
 mysql_exec <<SQL
 SET SESSION sql_mode = CONCAT(@@SESSION.sql_mode, ',ANSI_QUOTES');
 
+-- Workspace minimal
 INSERT INTO workspaces (
   id, org_id, name, slug,
   beta_features, features,
@@ -92,6 +85,7 @@ VALUES (
 )
 ON DUPLICATE KEY UPDATE id = id;
 
+-- Key auth minimal
 INSERT INTO key_auth (
   id, workspace_id, store_encrypted_keys, created_at_m
 )
@@ -100,6 +94,7 @@ VALUES (
 )
 ON DUPLICATE KEY UPDATE id = id;
 
+-- Permission for apis.createApi
 INSERT INTO permissions (
   id, workspace_id, name, slug, description, created_at_m
 )
@@ -110,6 +105,7 @@ VALUES (
 )
 ON DUPLICATE KEY UPDATE id = id;
 
+-- Insert the root key (hash + start)
 INSERT INTO "keys" (
   id, key_auth_id, "hash", "start",
   workspace_id, for_workspace_id,
@@ -125,6 +121,7 @@ ON DUPLICATE KEY UPDATE
   "start" = VALUES("start"),
   enabled = true;
 
+-- Attach permission to root key
 INSERT INTO keys_permissions (
   key_id, permission_id, workspace_id, created_at_m
 )
@@ -132,6 +129,16 @@ VALUES (
   '${ROOT_KEY_ID}', '${PERM_ID}', '${WORKSPACE_ID}', 0
 )
 ON DUPLICATE KEY UPDATE key_id = key_id;
+
+-- ** IMPORTANT: seed key_migrations so Unkey knows how to validate keys **
+INSERT INTO key_migrations (
+  id, workspace_id, algorithm
+)
+VALUES (
+  'root-prefixed', '${WORKSPACE_ID}', 'github.com/seamapi/prefixed-api-key'
+)
+ON DUPLICATE KEY UPDATE
+  algorithm = VALUES(algorithm);
 SQL
 
 echo "Done."
