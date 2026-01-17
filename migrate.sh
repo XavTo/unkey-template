@@ -36,6 +36,34 @@ else
   echo "Schema already present."
 fi
 
+# -----------------------------
+# Compute Unkey key components
+# -----------------------------
+# Unkey expects:
+# - start = short token
+# - hash  = sha256(long token)
+# See prefixedapikey ExtractShortToken / ExtractLongTokenHash :contentReference[oaicite:2]{index=2}
+
+KEY_PREFIX="$(printf '%s' "$UNKEY_ROOT_KEY" | cut -d'_' -f1)"
+PART2="$(printf '%s' "$UNKEY_ROOT_KEY" | cut -d'_' -f2)"
+PART3="$(printf '%s' "$UNKEY_ROOT_KEY" | cut -d'_' -f3)"
+
+if [ -n "$PART3" ] && [ "$PART3" != "$UNKEY_ROOT_KEY" ]; then
+  # Format: prefix_SHORT_LONG
+  ROOT_KEY_START="$PART2"
+  ROOT_KEY_LONG="$PART3"
+else
+  # Format: prefix_LONG
+  ROOT_KEY_START="$PART2"
+  ROOT_KEY_LONG="$PART2"
+fi
+
+ROOT_KEY_HASH="$(printf '%s' "$ROOT_KEY_LONG" | sha256sum | awk '{print $1}')"
+
+echo "Root key prefix: $KEY_PREFIX"
+echo "Root key start : $ROOT_KEY_START"
+echo "Root key hash  : $ROOT_KEY_HASH"
+
 # --- SEED ROOT KEY (self-host bootstrap) ---
 
 WORKSPACE_ID="ws_railway"
@@ -46,16 +74,11 @@ ROOT_KEY_ID="key_root"
 PERM_ID="perm_api_create_api"
 ROOT_KEY_NAME="root"
 
-ROOT_KEY_HASH="$(printf '%s' "$UNKEY_ROOT_KEY" | sha256sum | awk '{print $1}')"
-ROOT_KEY_START="$(printf '%s' "$UNKEY_ROOT_KEY" | cut -c1-8)"
-
 echo "Seeding workspace/keyauth/root key..."
 
 mysql_exec <<SQL
--- Use ANSI_QUOTES so we can write "keys", "hash", "start" safely (no shell backticks)
 SET SESSION sql_mode = CONCAT(@@SESSION.sql_mode, ',ANSI_QUOTES');
 
--- Workspace minimal
 INSERT INTO workspaces (
   id, org_id, name, slug,
   beta_features, features,
@@ -68,7 +91,6 @@ VALUES (
 )
 ON DUPLICATE KEY UPDATE id = id;
 
--- Key auth minimal
 INSERT INTO key_auth (
   id, workspace_id, store_encrypted_keys, created_at_m
 )
@@ -77,7 +99,6 @@ VALUES (
 )
 ON DUPLICATE KEY UPDATE id = id;
 
--- Permission requise par apis.createApi : api.*.create_api
 INSERT INTO permissions (
   id, workspace_id, name, slug, description, created_at_m
 )
@@ -88,7 +109,6 @@ VALUES (
 )
 ON DUPLICATE KEY UPDATE id = id;
 
--- Root key (stockée par hash)
 INSERT INTO "keys" (
   id, key_auth_id, "hash", "start",
   workspace_id, for_workspace_id,
@@ -104,7 +124,6 @@ ON DUPLICATE KEY UPDATE
   "start" = VALUES("start"),
   enabled = true;
 
--- Attacher la permission à la root key
 INSERT INTO keys_permissions (
   key_id, permission_id, workspace_id, created_at_m
 )
