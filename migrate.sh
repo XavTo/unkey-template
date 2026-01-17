@@ -52,6 +52,9 @@ ROOT_KEY_START="$(printf '%s' "$UNKEY_ROOT_KEY" | cut -c1-8)"
 echo "Seeding workspace/keyauth/root key..."
 
 mysql_exec <<SQL
+-- Use ANSI_QUOTES so we can write "keys", "hash", "start" safely (no shell backticks)
+SET SESSION sql_mode = CONCAT(@@SESSION.sql_mode, ',ANSI_QUOTES');
+
 -- Workspace minimal
 INSERT INTO workspaces (
   id, org_id, name, slug,
@@ -85,9 +88,9 @@ VALUES (
 )
 ON DUPLICATE KEY UPDATE id = id;
 
--- Root key (stockée par hash) : IMPORTANT -> backticks sur `keys`, `hash`, `start`
-INSERT INTO \`keys\` (
-  id, key_auth_id, \`hash\`, \`start\`,
+-- Root key (stockée par hash)
+INSERT INTO "keys" (
+  id, key_auth_id, "hash", "start",
   workspace_id, for_workspace_id,
   name, enabled, created_at_m
 )
@@ -97,12 +100,12 @@ VALUES (
   '${ROOT_KEY_NAME}', true, 0
 )
 ON DUPLICATE KEY UPDATE
-  \`hash\` = VALUES(\`hash\`),
-  \`start\` = VALUES(\`start\`),
+  "hash" = VALUES("hash"),
+  "start" = VALUES("start"),
   enabled = true;
 
 -- Attacher la permission à la root key
-INSERT INTO \`keys_permissions\` (
+INSERT INTO keys_permissions (
   key_id, permission_id, workspace_id, created_at_m
 )
 VALUES (
